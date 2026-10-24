@@ -1,0 +1,13 @@
+load std.io: println
+
+public fun emit_link_archive(path: string) {
+    println("yuki:link-archive=${path}")
+}
+
+public fun emit_link_system(lib: string) {
+    println("yuki:link-system=${lib}")
+}
+
+public fun emit_warning(msg: string) {
+    println("yuki:warning=${msg}")
+}

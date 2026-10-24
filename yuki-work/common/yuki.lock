@@ -1,0 +1,12 @@
+version = 1
+target = "x86_64-unknown-linux-gnu"
+compiler = "0.1.0"
+profile = "debug"
+
+[[package]]
+name = "buildtool"
+version = "0.1.0"
+kind = "static"
+source = "root"
+checksum = "blake3:17b0f80a42cf8859e5e8709dc301c7c702a6e5a2882be2d62505a22c21930e74"
+features = ["default"]

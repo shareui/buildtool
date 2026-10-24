@@ -1,0 +1,17 @@
+public struct ToolchainError {
+    message: string
+    tool: string
+    code: int32
+}
+
+public struct CompilationError {
+    message: string
+    command: string
+    output: string
+    code: int32
+}
+
+public struct ConfigError {
+    message: string
+    code: int32
+}

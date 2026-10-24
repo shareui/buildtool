@@ -1,0 +1,103 @@
+load std.process: command_new
+load .errors: ToolchainError
+
+public fun tool_exists(tool: string) -> bool {
+    sus {
+        set cmd = command_new("which")
+        cmd.arg(tool)
+        set out = cmd.output()
+        if out.success() {
+            return true
+        }
+    } catch e {
+        space
+    }
+
+    sus {
+        set cmd = command_new("where")
+        cmd.arg(tool)
+        set out = cmd.output()
+        if out.success() {
+            return true
+        }
+    } catch e {
+        space
+    }
+
+    sus {
+        set cmd = command_new(tool)
+        cmd.arg("--version")
+        set out = cmd.output()
+        if out.success() {
+            return true
+        }
+    } catch e {
+        space
+    }
+
+    return false
+}
+
+public fun find_c_compiler() -> string {
+    if tool_exists("clang") {
+        return "clang"
+    }
+    if tool_exists("gcc") {
+        return "gcc"
+    }
+    panic(ToolchainError {
+        message: "C compiler not found in PATH. Please install clang (recommended) or gcc.",
+        tool: "clang/gcc",
+        code: 1001,
+    })
+}
+
+public fun find_cpp_compiler() -> string {
+    if tool_exists("clang++") {
+        return "clang++"
+    }
+    if tool_exists("g++") {
+        return "g++"
+    }
+    panic(ToolchainError {
+        message: "C++ compiler not found in PATH. Please install clang++ (recommended) or g++.",
+        tool: "clang++/g++",
+        code: 1002,
+    })
+}
+
+public fun find_ar() -> string {
+    if tool_exists("ar") {
+        return "ar"
+    }
+    if tool_exists("llvm-ar") {
+        return "llvm-ar"
+    }
+    panic(ToolchainError {
+        message: "Static archiver tool not found in PATH. Please install ar (binutils) or llvm-ar.",
+        tool: "ar",
+        code: 1003,
+    })
+}
+
+public fun find_rustc() -> string {
+    if tool_exists("rustc") {
+        return "rustc"
+    }
+    panic(ToolchainError {
+        message: "Rust compiler (rustc) not found in PATH. Please install Rust: https://rustup.rs",
+        tool: "rustc",
+        code: 1004,
+    })
+}
+
+public fun find_cargo() -> string {
+    if tool_exists("cargo") {
+        return "cargo"
+    }
+    panic(ToolchainError {
+        message: "Cargo not found in PATH. Please install Rust and Cargo: https://rustup.rs",
+        tool: "cargo",
+        code: 1005,
+    })
+}

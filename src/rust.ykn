@@ -1,0 +1,192 @@
+load std.fs.paths: path_parent, path_join
+load std.fs.dirs: dir_create_all
+load std.fs.files: file_exists, file_copy
+load std.env: get_env
+load std.process: command_new
+load .toolchain: find_rustc, find_cargo
+load .emit: emit_link_archive
+load .errors: CompilationError, ConfigError
+
+public class RustBuilder {
+    public src_file: string?
+    public cargo_toml_path: string?
+    public flags: string[]
+    public is_release: bool
+    public target_triple: string?
+    public target_out_dir: string?
+    public opt_level: string?
+    public emit_link: bool
+
+    public fun init() {
+        rewrite this.src_file = null
+        rewrite this.cargo_toml_path = null
+        rewrite this.flags = []
+        rewrite this.is_release = true
+        rewrite this.target_triple = null
+        rewrite this.target_out_dir = null
+        rewrite this.opt_level = null
+        rewrite this.emit_link = true
+    }
+
+    public fun file(path: string) -> RustBuilder {
+        rewrite this.src_file = path
+        return this
+    }
+
+    public fun cargo(toml_path: string) -> RustBuilder {
+        rewrite this.cargo_toml_path = toml_path
+        return this
+    }
+
+    public fun flag(flg: string) -> RustBuilder {
+        this.flags.push(flg)
+        return this
+    }
+
+    public fun flags(flgs: string[]) -> RustBuilder {
+        for i in 0..flgs.len() {
+            this.flags.push(flgs[i])
+        }
+        return this
+    }
+
+    public fun release(rel: bool) -> RustBuilder {
+        rewrite this.is_release = rel
+        return this
+    }
+
+    public fun opt(level: string) -> RustBuilder {
+        rewrite this.opt_level = level
+        return this
+    }
+
+    public fun target(triple: string) -> RustBuilder {
+        rewrite this.target_triple = triple
+        return this
+    }
+
+    public fun out_dir(dir: string) -> RustBuilder {
+        rewrite this.target_out_dir = dir
+        return this
+    }
+
+    public fun emit_link_directives(emit: bool) -> RustBuilder {
+        rewrite this.emit_link = emit
+        return this
+    }
+
+    public fun compile(archive_name: string) -> string {
+        set raw_out = this.target_out_dir ?? get_env("YUKINO_OUT_DIR") ?? "yuki-work/buildtool"
+        set effective_out = path_join(raw_out, "native")
+        dir_create_all(effective_out)
+
+        set archive_filename = "lib" + archive_name + ".a"
+        set final_archive_path = path_join(effective_out, archive_filename)
+
+        if this.cargo_toml_path != null {
+            set cargo_bin = find_cargo()
+            set manifest = this.cargo_toml_path ?? "Cargo.toml"
+            set cargo_parent = path_parent(manifest)
+            if cargo_parent == "" {
+                rewrite cargo_parent = "."
+            }
+
+            set cmd = command_new(cargo_bin)
+            cmd.arg("build")
+            cmd.arg("--manifest-path")
+            cmd.arg(manifest)
+
+            if this.is_release {
+                cmd.arg("--release")
+            }
+
+            if this.target_triple != null {
+                cmd.arg("--target")
+                cmd.arg(this.target_triple ?? "")
+            }
+
+            for i in 0..this.flags.len() {
+                cmd.arg(this.flags[i])
+            }
+
+            set out = cmd.output()
+            if !out.success() {
+                panic(CompilationError {
+                    message: "Cargo build failed for '${manifest}'",
+                    command: "${cargo_bin} build --manifest-path ${manifest}",
+                    output: out.stderr_string(),
+                    code: 3001,
+                })
+            }
+
+            set mode_dir: string = if this.is_release { "release" } else { "debug" }
+            set built_archive: string = if this.target_triple != null {
+                path_join(cargo_parent, path_join("target", path_join(this.target_triple ?? "", path_join(mode_dir, archive_filename))))
+            } else {
+                path_join(cargo_parent, path_join("target", path_join(mode_dir, archive_filename)))
+            }
+
+            if file_exists(built_archive) {
+                file_copy(built_archive, final_archive_path)
+            } else {
+                panic(CompilationError {
+                    message: "Cargo build finished but artifact was not found at '${built_archive}'",
+                    command: "${cargo_bin} build --manifest-path ${manifest}",
+                    output: out.stderr_string(),
+                    code: 3002,
+                })
+            }
+        } elif this.src_file != null {
+            set rustc_bin = find_rustc()
+            set src = this.src_file ?? ""
+
+            set cmd = command_new(rustc_bin)
+            cmd.arg("--crate-type")
+            cmd.arg("staticlib")
+            cmd.arg("-o")
+            cmd.arg(final_archive_path)
+
+            if this.opt_level != null {
+                cmd.arg("-Copt-level=" + (this.opt_level ?? "3"))
+            } elif this.is_release {
+                cmd.arg("-Copt-level=3")
+            }
+
+            if this.target_triple != null {
+                cmd.arg("--target")
+                cmd.arg(this.target_triple ?? "")
+            }
+
+            for i in 0..this.flags.len() {
+                cmd.arg(this.flags[i])
+            }
+
+            cmd.arg(src)
+
+            set out = cmd.output()
+            if !out.success() {
+                panic(CompilationError {
+                    message: "rustc compilation failed for '${src}'",
+                    command: "${rustc_bin} --crate-type staticlib -o ${final_archive_path} ${src}",
+                    output: out.stderr_string(),
+                    code: 3003,
+                })
+            }
+        } else {
+            panic(ConfigError {
+                message: "No Rust source file (.file) or Cargo.toml (.cargo) specified",
+                code: 3004,
+            })
+        }
+
+        if this.emit_link {
+            emit_link_archive(final_archive_path)
+        }
+
+        return final_archive_path
+    }
+}
+
+public fun rust() -> RustBuilder {
+    return init RustBuilder()
+}

@@ -1,6 +1,6 @@
 # Сборка Rust кода (RustBuilder)
 
-Модуль предоставляет класс `RustBuilder` и фабричную функцию `rust()` для сборки исходных файлов Rust (через `rustc`) или полноценных проектов Cargo (через `Cargo.toml`) в статический архив `.a`.
+Модуль предоставляет класс `RustBuilder` и фабричную функцию `rust()` для сборки исходных файлов Rust (через `rustc`) или полноценных проектов Cargo (через `Cargo.toml`) в статический архив (`.a` или `.lib`).
 
 ---
 
@@ -66,7 +66,7 @@ fun main() {
 }
 ```
 
-Билдер запустит `cargo build --release --manifest-path native_cargo/Cargo.toml`, скопирует `libfastmath.a` в целевую директорию сборки и выведет директиву `yuki:link-archive=...`.
+Билдер запустит `cargo build --release --manifest-path native_cargo/Cargo.toml`, скопирует собранный архив (`libfastmath.a` или `fastmath.lib`) в директорию `yuki-work/local/build/...` и выведет директиву `yuki:link-archive=...`.
 
 ---
 
@@ -110,11 +110,22 @@ public fun opt(level: string) -> RustBuilder
 
 ### 3.5 target(triple: string) -> RustBuilder
 
-Задает целевой трипл для кросс-компиляции (флаг `--target`).
+Задает целевую платформу для кросс-компиляции (флаг `--target`).
 
 ```yukino
 public fun target(triple: string) -> RustBuilder
 ```
+
+По умолчанию платформа автоматически считывается из переменной окружения `YUKINO_TARGET_TRIPLE`, которую компилятор Yukino передает в `build.ykn`.
+
+Поддерживаются все 7 целевых платформ:
+- `x86_64-unknown-linux-gnu`
+- `x86_64-unknown-linux-musl`
+- `aarch64-unknown-linux-gnu`
+- `aarch64-unknown-linux-musl`
+- `x86_64-pc-windows-gnu`
+- `x86_64-pc-windows-msvc`
+- `aarch64-linux-android`
 
 ### 3.6 flag(flg: string) -> RustBuilder
 
@@ -134,7 +145,7 @@ public fun flags(flgs: string[]) -> RustBuilder
 
 ### 3.8 out_dir(dir: string) -> RustBuilder
 
-Задает каталог вывода статического архива. По умолчанию используется каталог сборки Yukino (`YUKINO_OUT_DIR`).
+Задает каталог вывода статического архива. По умолчанию используется каталог сборки Yukino (`YUKINO_OUT_DIR` или `yuki-work/local/buildtool`).
 
 ```yukino
 public fun out_dir(dir: string) -> RustBuilder
@@ -152,7 +163,7 @@ public fun emit_link_directives(emit: bool) -> RustBuilder
 
 ### 3.10 compile(archive_name: string) -> string
 
-Запускает процесс компиляции и возвращает абсолютный путь к собранному архиву `lib<archive_name>.a`.
+Запускает процесс компиляции и возвращает абсолютный путь к собранному архиву (`lib<archive_name>.a` или `<archive_name>.lib` для MSVC).
 
 ```yukino
 public fun compile(archive_name: string) -> string

@@ -8,5 +8,5 @@ name = "buildtool"
 version = "0.1.0"
 kind = "static"
 source = "root"
-checksum = "blake3:17b0f80a42cf8859e5e8709dc301c7c702a6e5a2882be2d62505a22c21930e74"
+checksum = "blake3:81fcc6246e604c1c9d150533642ef4fd2cf0d70947ba99144e0a8b4192b846e9"
 features = ["default"]

@@ -1,0 +1,27 @@
+load std.fs.files: file_exists
+load root.cc: cc
+load root.rust: rust
+
+#[test]
+fun test_compile_c_static_archive() {
+    set archive_path = cc()
+        .file("tests/fixtures/tiny.c")
+        .opt("2")
+        .out_dir("yuki-work/local/test_out_c")
+        .compile("tiny")
+
+    assert(file_exists(archive_path))
+    assert(file_exists("yuki-work/local/test_out_c/native/libtiny.a"))
+}
+
+#[test]
+fun test_compile_rust_static_archive() {
+    set archive_path = rust()
+        .file("tests/fixtures/tiny.rs")
+        .opt("2")
+        .out_dir("yuki-work/local/test_out_rs")
+        .compile("tinyrs")
+
+    assert(file_exists(archive_path))
+    assert(file_exists("yuki-work/local/test_out_rs/native/libtinyrs.a"))
+}

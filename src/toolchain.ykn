@@ -1,7 +1,129 @@
-load std.process: command_new
+load std.fs.files: file_exists
+load std.env: get_env
+load std.process: command_new, ProcessError
+load std.io: println
+load std.strings: contains, ends_with
 load .errors: ToolchainError
 
+public fun is_msvc_target(target: string) -> bool {
+    return contains(target, "windows-msvc") || contains(target, "msvc")
+}
+
+public fun is_windows_target(target: string) -> bool {
+    return contains(target, "windows")
+}
+
+public fun is_msvc_compiler(compiler: string) -> bool {
+    if compiler == "cl" || compiler == "cl.exe" {
+        return true
+    }
+    if ends_with(compiler, "/cl") || ends_with(compiler, "\\cl") {
+        return true
+    }
+    if ends_with(compiler, "/cl.exe") || ends_with(compiler, "\\cl.exe") {
+        return true
+    }
+    return contains(compiler, "clang-cl")
+}
+
+public fun is_msvc_archiver(ar: string) -> bool {
+    if ar == "lib" || ar == "lib.exe" || ar == "llvm-lib" || ar == "llvm-lib.exe" {
+        return true
+    }
+    if ends_with(ar, "/lib") || ends_with(ar, "\\lib") || ends_with(ar, "/lib.exe") || ends_with(ar, "\\lib.exe") {
+        return true
+    }
+    if ends_with(ar, "/llvm-lib") || ends_with(ar, "\\llvm-lib") || ends_with(ar, "/llvm-lib.exe") || ends_with(ar, "\\llvm-lib.exe") {
+        return true
+    }
+    return false
+}
+
+public fun is_clang_compiler(compiler: string) -> bool {
+    return contains(compiler, "clang")
+}
+
+fun pick_first_available(tools: string[]) -> string? {
+    for i in 0..tools.len() {
+        if tool_exists(tools[i]) {
+            return tools[i]
+        }
+    }
+    return null
+}
+
+fun target_c_candidates(target: string) -> string[] {
+    if target == "x86_64-pc-windows-msvc" {
+        return ["clang", "cl", "clang-cl"]
+    }
+    if target == "x86_64-pc-windows-gnu" {
+        return ["clang", "x86_64-w64-mingw32-gcc", "gcc"]
+    }
+    if target == "aarch64-unknown-linux-gnu" {
+        return ["clang", "aarch64-linux-gnu-gcc", "gcc"]
+    }
+    if target == "aarch64-unknown-linux-musl" {
+        return ["clang", "aarch64-linux-musl-gcc"]
+    }
+    if target == "x86_64-unknown-linux-musl" {
+        return ["clang", "musl-gcc", "x86_64-linux-musl-gcc", "gcc"]
+    }
+    if target == "aarch64-linux-android" {
+        return ["aarch64-linux-android-clang", "clang"]
+    }
+    return ["clang", "gcc"]
+}
+
+fun target_cpp_candidates(target: string) -> string[] {
+    if target == "x86_64-pc-windows-msvc" {
+        return ["clang++", "cl", "clang-cl"]
+    }
+    if target == "x86_64-pc-windows-gnu" {
+        return ["clang++", "x86_64-w64-mingw32-g++", "g++"]
+    }
+    if target == "aarch64-unknown-linux-gnu" {
+        return ["clang++", "aarch64-linux-gnu-g++", "g++"]
+    }
+    if target == "aarch64-unknown-linux-musl" {
+        return ["clang++", "aarch64-linux-musl-g++"]
+    }
+    if target == "x86_64-unknown-linux-musl" {
+        return ["clang++", "x86_64-linux-musl-g++", "g++"]
+    }
+    if target == "aarch64-linux-android" {
+        return ["aarch64-linux-android-clang++", "clang++"]
+    }
+    return ["clang++", "g++"]
+}
+
+fun target_ar_candidates(target: string) -> string[] {
+    if is_msvc_target(target) {
+        return ["llvm-lib", "lib", "llvm-ar", "ar"]
+    }
+    if target == "x86_64-pc-windows-gnu" {
+        return ["llvm-ar", "x86_64-w64-mingw32-ar", "ar"]
+    }
+    if target == "aarch64-unknown-linux-gnu" {
+        return ["llvm-ar", "aarch64-linux-gnu-ar", "ar"]
+    }
+    if target == "aarch64-unknown-linux-musl" {
+        return ["llvm-ar", "aarch64-linux-musl-ar", "ar"]
+    }
+    if target == "x86_64-unknown-linux-musl" {
+        return ["llvm-ar", "x86_64-linux-musl-ar", "ar"]
+    }
+    if target == "aarch64-linux-android" {
+        return ["llvm-ar", "aarch64-linux-android-ar", "ar"]
+    }
+    return ["llvm-ar", "ar"]
+}
+
 public fun tool_exists(tool: string) -> bool {
+    if contains(tool, "/") || contains(tool, "\\") {
+        if file_exists(tool) {
+            return true
+        }
+    }
     sus {
         set cmd = command_new("which")
         cmd.arg(tool)
@@ -9,10 +131,9 @@ public fun tool_exists(tool: string) -> bool {
         if out.success() {
             return true
         }
-    } catch e {
-        space
+    } catch e: ProcessError {
+        println("${errkind}: ${e.message} (${e.code})")
     }
-
     sus {
         set cmd = command_new("where")
         cmd.arg(tool)
@@ -20,10 +141,9 @@ public fun tool_exists(tool: string) -> bool {
         if out.success() {
             return true
         }
-    } catch e {
-        space
+    } catch e: ProcessError {
+        println("${errkind}: ${e.message} (${e.code})")
     }
-
     sus {
         set cmd = command_new(tool)
         cmd.arg("--version")
@@ -31,53 +151,98 @@ public fun tool_exists(tool: string) -> bool {
         if out.success() {
             return true
         }
-    } catch e {
-        space
+    } catch e: ProcessError {
+        println("${errkind}: ${e.message} (${e.code})")
     }
-
+    sus {
+        set cmd = command_new(tool)
+        cmd.arg("/?")
+        set out = cmd.output()
+        if out.success() {
+            return true
+        }
+    } catch e: ProcessError {
+        println("${errkind}: ${e.message} (${e.code})")
+    }
     return false
 }
 
-public fun find_c_compiler() -> string {
-    if tool_exists("clang") {
-        return "clang"
+public fun find_c_compiler_for_target(target: string?) -> string {
+    set env_cc = get_env("CC")
+    if env_cc != null && (env_cc ?? "") != "" {
+        return env_cc ?? ""
     }
-    if tool_exists("gcc") {
-        return "gcc"
+    if target != null && (target ?? "") != "" {
+        set target_match = pick_first_available(target_c_candidates(target ?? ""))
+        if target_match != null {
+            return target_match ?? ""
+        }
+    }
+    set fallback_match = pick_first_available(["clang", "gcc", "cl"])
+    if fallback_match != null {
+        return fallback_match ?? ""
     }
     panic(ToolchainError {
-        message: "C compiler not found in PATH. Please install clang (recommended) or gcc.",
-        tool: "clang/gcc",
+        message: "C compiler not found for target. Please install clang, gcc, or msvc cl.",
+        tool: "c_compiler",
         code: 1001,
     })
 }
 
-public fun find_cpp_compiler() -> string {
-    if tool_exists("clang++") {
-        return "clang++"
+public fun find_cpp_compiler_for_target(target: string?) -> string {
+    set env_cxx = get_env("CXX")
+    if env_cxx != null && (env_cxx ?? "") != "" {
+        return env_cxx ?? ""
     }
-    if tool_exists("g++") {
-        return "g++"
+    if target != null && (target ?? "") != "" {
+        set target_match = pick_first_available(target_cpp_candidates(target ?? ""))
+        if target_match != null {
+            return target_match ?? ""
+        }
+    }
+    set fallback_match = pick_first_available(["clang++", "g++", "cl"])
+    if fallback_match != null {
+        return fallback_match ?? ""
     }
     panic(ToolchainError {
-        message: "C++ compiler not found in PATH. Please install clang++ (recommended) or g++.",
-        tool: "clang++/g++",
+        message: "C++ compiler not found for target. Please install clang++, g++, or msvc cl.",
+        tool: "cpp_compiler",
         code: 1002,
     })
 }
 
-public fun find_ar() -> string {
-    if tool_exists("ar") {
-        return "ar"
+public fun find_ar_for_target(target: string?) -> string {
+    set env_ar = get_env("AR")
+    if env_ar != null && (env_ar ?? "") != "" {
+        return env_ar ?? ""
     }
-    if tool_exists("llvm-ar") {
-        return "llvm-ar"
+    if target != null && (target ?? "") != "" {
+        set target_match = pick_first_available(target_ar_candidates(target ?? ""))
+        if target_match != null {
+            return target_match ?? ""
+        }
+    }
+    set fallback_match = pick_first_available(["llvm-ar", "ar", "lib"])
+    if fallback_match != null {
+        return fallback_match ?? ""
     }
     panic(ToolchainError {
-        message: "Static archiver tool not found in PATH. Please install ar (binutils) or llvm-ar.",
-        tool: "ar",
+        message: "Static archiver tool not found. Please install llvm-ar, ar, or msvc lib.",
+        tool: "archiver",
         code: 1003,
     })
+}
+
+public fun find_c_compiler() -> string {
+    return find_c_compiler_for_target(null)
+}
+
+public fun find_cpp_compiler() -> string {
+    return find_cpp_compiler_for_target(null)
+}
+
+public fun find_ar() -> string {
+    return find_ar_for_target(null)
 }
 
 public fun find_rustc() -> string {

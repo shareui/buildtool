@@ -1,10 +1,10 @@
 # Building C and C++ (CcBuilder)
 
-The `CcBuilder` class and its `cc()` factory function provide a flexible interface for compiling C and C++ sources into static `.a` archives.
+The module provides the `CcBuilder` class and the `cc()` factory function for flexible compilation of C and C++ sources into a static archive (`.a` or `.lib`).
 
 ---
 
-## 1. Import
+## 1. Importing
 
 ```yukino
 load buildtool: cc, CcBuilder
@@ -14,7 +14,7 @@ load buildtool: cc, CcBuilder
 
 ## 2. Quick Start
 
-Create a `build.ykn` file in your project root:
+A simple `build.ykn` at the root of your project:
 
 ```yukino
 load buildtool: cc
@@ -28,10 +28,10 @@ fun main() {
 ```
 
 When running `yukino build` or `yukino run`:
-1. Passing `native/mymath.h` registers `native/` in the include search paths (`-I native`).
-2. `native/mymath.c` is compiled into an object file.
-3. The `ar` utility packages the object file into `libmymath.a`.
-4. The builder outputs `yuki:link-archive=...`, causing Yukino to link `mymath` into the application binary.
+1. Header file `native/mymath.h` automatically adds its parent directory `native/` to include search paths (`-I native` or `/I native`).
+2. Source file `native/mymath.c` is compiled into an object file (`.o` or `.obj`).
+3. The archiver (`ar`, `llvm-ar`, or `lib.exe`) packs the object file into a static archive (`libmymath.a` or `mymath.lib`).
+4. The builder emits `yuki:link-archive=...`, and the Yukino binary links with the native library.
 
 ---
 
@@ -39,18 +39,18 @@ When running `yukino build` or `yukino run`:
 
 ### 3.1 file(path: string) -> CcBuilder
 
-Adds a single file to the compilation.
+Adds a single file to the build.
 
 ```yukino
 public fun file(path: string) -> CcBuilder
 ```
 
-- Header files (`.h` or `.hpp`) are not compiled directly; their parent directory is automatically added to the include search paths (`-I`).
-- C++ files (`.cpp`, `.cc`, `.cxx`, `.C`) automatically enable C++ compilation mode (`is_cpp = true`).
+- If a header file (`.h` or `.hpp`) is passed, its parent folder is added to include paths (`-I` or `/I`).
+- If a C++ source file (`.cpp`, `.cc`, `.cxx`, `.C`) is passed, C++ mode is activated automatically (`is_cpp = true`).
 
 ### 3.2 files(paths: string[]) -> CcBuilder
 
-Adds multiple files to the compilation.
+Adds multiple files to the build.
 
 ```yukino
 public fun files(paths: string[]) -> CcBuilder
@@ -58,7 +58,7 @@ public fun files(paths: string[]) -> CcBuilder
 
 ### 3.3 include(dir: string) -> CcBuilder
 
-Adds a directory to header search paths (`-I`).
+Adds an include directory (flag `-I` or `/I`).
 
 ```yukino
 public fun include(dir: string) -> CcBuilder
@@ -66,7 +66,7 @@ public fun include(dir: string) -> CcBuilder
 
 ### 3.4 includes(dirs: string[]) -> CcBuilder
 
-Adds multiple directories to header search paths.
+Adds multiple include directories.
 
 ```yukino
 public fun includes(dirs: string[]) -> CcBuilder
@@ -74,18 +74,18 @@ public fun includes(dirs: string[]) -> CcBuilder
 
 ### 3.5 def(name: string, val: string?) -> CcBuilder
 
-Defines a preprocessor macro (`-D`).
+Defines a preprocessor macro (flag `-D` or `/D`).
 
 ```yukino
 public fun def(name: string, val: string?) -> CcBuilder
 ```
 
-- If `val` is `null`, `-D<name>` is passed.
-- If `val` is provided, `-D<name>=<val>` is passed.
+- If `val` is `null`, emits `-D<name>` or `/D<name>`.
+- If `val` is provided, emits `-D<name>=<val>` or `/D<name>=<val>`.
 
 ### 3.6 flag(flg: string) -> CcBuilder
 
-Appends a custom compiler flag.
+Adds an arbitrary compiler flag.
 
 ```yukino
 public fun flag(flg: string) -> CcBuilder
@@ -93,7 +93,7 @@ public fun flag(flg: string) -> CcBuilder
 
 ### 3.7 flags(flgs: string[]) -> CcBuilder
 
-Appends multiple compiler flags.
+Adds multiple arbitrary compiler flags.
 
 ```yukino
 public fun flags(flgs: string[]) -> CcBuilder
@@ -101,21 +101,60 @@ public fun flags(flgs: string[]) -> CcBuilder
 
 ### 3.8 std(version: string) -> CcBuilder
 
-Specifies the language standard (`-std=...`), e.g., `.std("c11")` or `.std("c++20")`.
+Sets the language standard (`-std=...` for GCC/Clang, `/std:...` for MSVC).
 
 ```yukino
 public fun std(version: string) -> CcBuilder
 ```
 
+Examples: `.std("c11")` or `.std("c++17")`.
+
 ### 3.9 opt(level: string) -> CcBuilder
 
-Sets the optimization level (`-O...`). Default is `"2"`.
+Sets the optimization level.
 
 ```yukino
 public fun opt(level: string) -> CcBuilder
 ```
 
-### 3.10 cpp(enabled: bool) -> CcBuilder
+Defaults to `"2"` (`-O2` or `/O2`). Other levels like `"0"`, `"1"`, `"3"`, `"s"` are supported.
+
+### 3.10 target(triple: string) -> CcBuilder
+
+Sets the cross-compilation target triple.
+
+```yukino
+public fun target(triple: string) -> CcBuilder
+```
+
+By default, the target is automatically detected from the `YUKINO_TARGET_TRIPLE` environment variable passed by the Yukino driver.
+
+All 7 Yukino targets are supported:
+- `x86_64-unknown-linux-gnu`
+- `x86_64-unknown-linux-musl`
+- `aarch64-unknown-linux-gnu`
+- `aarch64-unknown-linux-musl`
+- `x86_64-pc-windows-gnu`
+- `x86_64-pc-windows-msvc`
+- `aarch64-linux-android`
+
+### 3.11 compiler(path: string) -> CcBuilder
+
+Explicitly sets the compiler binary path.
+
+```yukino
+public fun compiler(path: string) -> CcBuilder
+```
+
+### 3.12 archiver(path: string) -> CcBuilder
+
+Explicitly sets the static archiver binary path (`ar`, `llvm-ar`, `lib.exe`).
+
+```yukino
+public fun archiver(path: string) -> CcBuilder
+```
+
+### 3.13 cpp(enabled: bool) -> CcBuilder
 
 Explicitly enables or disables C++ compilation mode.
 
@@ -123,33 +162,38 @@ Explicitly enables or disables C++ compilation mode.
 public fun cpp(enabled: bool) -> CcBuilder
 ```
 
-### 3.11 out_dir(dir: string) -> CcBuilder
+### 3.14 out_dir(dir: string) -> CcBuilder
 
-Specifies the output directory for artifacts. Defaults to `YUKINO_OUT_DIR`.
+Sets the output directory for object files and archives. Defaults to `YUKINO_OUT_DIR` or `yuki-work/local/buildtool`.
 
 ```yukino
 public fun out_dir(dir: string) -> CcBuilder
 ```
 
-### 3.12 emit_link_directives(emit: bool) -> CcBuilder
+### 3.15 emit_link_directives(emit: bool) -> CcBuilder
 
-Controls whether `yuki:link-archive=` and `yuki:link-system=` directives are printed to stdout. Default is `true`.
+Enables or disables automatic emission of `yuki:link-*` directives to stdout.
 
 ```yukino
 public fun emit_link_directives(emit: bool) -> CcBuilder
 ```
 
-### 3.13 compile(archive_name: string) -> string
+Defaults to `true`.
 
-Compiles all source files, creates `lib<archive_name>.a`, emits link directives, and returns the absolute archive path.
+### 3.16 compile(archive_name: string) -> string
+
+Compiles sources and packs them into a static archive.
 
 ```yukino
 public fun compile(archive_name: string) -> string
 ```
 
+Returns the absolute path to the generated archive (`lib<archive_name>.a` or `<archive_name>.lib`).  
+Emits `yuki:link-archive=<path>` and (for C++) `yuki:link-system=stdc++` (or `libcpmt` for MSVC).
+
 ---
 
-## 4. Full C++ Example
+## 4. C++ Example
 
 ```yukino
 load buildtool: cc
@@ -161,11 +205,10 @@ fun main() {
         .std("c++20")
         .opt("3")
         .def("ENABLE_FAST_MATH", "1")
-        .flag("-Wall")
         .compile("native_wrapper")
 }
 ```
 
 ---
 
-[Back: Overview](0-overview.md) | [Next: Rust Builder (2-rust.md)](2-rust.md)
+[Back: Overview](0-overview.md) | [Next: Building Rust (2-rust.md)](2-rust.md)

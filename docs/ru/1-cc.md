@@ -1,6 +1,6 @@
 # Сборка C и C++ кода (CcBuilder)
 
-Модуль предоставляет класс `CcBuilder` и фабричную функцию `cc()` для гибкой компиляции исходников на C и C++ в статический архив `.a`.
+Модуль предоставляет класс `CcBuilder` и фабричную функцию `cc()` для гибкой компиляции исходников на C и C++ в статический архив (`.a` или `.lib`).
 
 ---
 
@@ -28,10 +28,10 @@ fun main() {
 ```
 
 При запуске `yukino build` или `yukino run`:
-1. Файл заголовка `native/mymath.h` автоматически регистрирует родительскую директорию `native/` в путях поиска (`-I native`).
-2. Исходный файл `native/mymath.c` компилируется в объектный файл.
-3. Утилита `ar` упаковывает объектный файл в `libmymath.a`.
-4. Билдер автоматически выводит директиву `yuki:link-archive=...`, и итоговый бинарник Yukino успешно линкуется с `mymath`.
+1. Файл заголовка `native/mymath.h` автоматически регистрирует родительскую директорию `native/` в путях поиска (`-I native` или `/I native`).
+2. Исходный файл `native/mymath.c` компилируется в объектный файл (`.o` или `.obj`).
+3. Архиватор (`ar`, `llvm-ar` или `lib.exe`) упаковывает объектный файл в статический архив (`libmymath.a` или `mymath.lib`).
+4. Билдер автоматически выводит директиву `yuki:link-archive=...`, и итоговый бинарник Yukino линкуется с библиотекой.
 
 ---
 
@@ -45,7 +45,7 @@ fun main() {
 public fun file(path: string) -> CcBuilder
 ```
 
-- Если передается файл заголовков (`.h` или `.hpp`), он не компилируется отдельно, а его родительская папка автоматически добавляется в список путей поиска инклудов (`-I`).
+- Если передается файл заголовков (`.h` или `.hpp`), его родительская папка автоматически добавляется в список путей поиска инклудов (`-I` или `/I`).
 - Если передается файл с расширением `.cpp`, `.cc`, `.cxx` или `.C`, билдер автоматически активирует режим компилятора C++ (`is_cpp = true`).
 
 ### 3.2 files(paths: string[]) -> CcBuilder
@@ -58,7 +58,7 @@ public fun files(paths: string[]) -> CcBuilder
 
 ### 3.3 include(dir: string) -> CcBuilder
 
-Добавляет директорию в пути поиска заголовков (флаг `-I`).
+Добавляет директорию в пути поиска заголовков (флаг `-I` или `/I`).
 
 ```yukino
 public fun include(dir: string) -> CcBuilder
@@ -74,14 +74,14 @@ public fun includes(dirs: string[]) -> CcBuilder
 
 ### 3.5 def(name: string, val: string?) -> CcBuilder
 
-Определяет препроцессорный макрос (флаг `-D`).
+Определяет препроцессорный макрос (флаг `-D` или `/D`).
 
 ```yukino
 public fun def(name: string, val: string?) -> CcBuilder
 ```
 
-- Если `val` равен `null`, передается флаг `-D<name>`.
-- Если `val` задан, передается флаг `-D<name>=<val>`.
+- Если `val` равен `null`, передается флаг `-D<name>` или `/D<name>`.
+- Если `val` задан, передается флаг `-D<name>=<val>` или `/D<name>=<val>`.
 
 ### 3.6 flag(flg: string) -> CcBuilder
 
@@ -101,7 +101,7 @@ public fun flags(flgs: string[]) -> CcBuilder
 
 ### 3.8 std(version: string) -> CcBuilder
 
-Задает стандарт языка (флаг `-std=...`).
+Задает стандарт языка (флаг `-std=...` для GCC/Clang или `/std:...` для MSVC).
 
 ```yukino
 public fun std(version: string) -> CcBuilder
@@ -111,15 +111,52 @@ public fun std(version: string) -> CcBuilder
 
 ### 3.9 opt(level: string) -> CcBuilder
 
-Задает уровень оптимизации компилятора C/C++ (флаг `-O...`).
+Задает уровень оптимизации компилятора C/C++.
 
 ```yukino
 public fun opt(level: string) -> CcBuilder
 ```
 
-По умолчанию используется уровень `"2"`. Например: `.opt("3")` или `.opt("s")`.
+По умолчанию используется уровень `"2"` (`-O2` или `/O2`). Также поддерживаются `"0"`, `"1"`, `"3"`, `"s"`.
 
-### 3.10 cpp(enabled: bool) -> CcBuilder
+### 3.10 target(triple: string) -> CcBuilder
+
+Задает целевую платформу кросс-компиляции.
+
+```yukino
+public fun target(triple: string) -> CcBuilder
+```
+
+По умолчанию целевая платформа автоматически считывается из переменной окружения `YUKINO_TARGET_TRIPLE`, которую компилятор Yukino передает в `build.ykn`. Метод позволяет явно переопределить платформу при необходимости.
+
+Поддерживаются все 7 платформ компилятора:
+- `x86_64-unknown-linux-gnu`
+- `x86_64-unknown-linux-musl`
+- `aarch64-unknown-linux-gnu`
+- `aarch64-unknown-linux-musl`
+- `x86_64-pc-windows-gnu`
+- `x86_64-pc-windows-msvc`
+- `aarch64-linux-android`
+
+### 3.11 compiler(path: string) -> CcBuilder
+
+Явно задает путь к исполняемому файлу компилятора C/C++.
+
+```yukino
+public fun compiler(path: string) -> CcBuilder
+```
+
+Если не задан, компилятор выбирается автоматически на основе целевой платформы и установленных в системе инструментов.
+
+### 3.12 archiver(path: string) -> CcBuilder
+
+Явно задает путь к утилите создания статических архивов (`ar`, `llvm-ar`, `lib.exe`).
+
+```yukino
+public fun archiver(path: string) -> CcBuilder
+```
+
+### 3.13 cpp(enabled: bool) -> CcBuilder
 
 Явно принудительно включает или выключает режим C++.
 
@@ -127,7 +164,7 @@ public fun opt(level: string) -> CcBuilder
 public fun cpp(enabled: bool) -> CcBuilder
 ```
 
-### 3.11 out_dir(dir: string) -> CcBuilder
+### 3.14 out_dir(dir: string) -> CcBuilder
 
 Задает директорию для сохранения скомпилированных объектных файлов и архива.
 
@@ -137,7 +174,7 @@ public fun out_dir(dir: string) -> CcBuilder
 
 Если не задана, автоматически используется переменная окружения `YUKINO_OUT_DIR`.
 
-### 3.12 emit_link_directives(emit: bool) -> CcBuilder
+### 3.15 emit_link_directives(emit: bool) -> CcBuilder
 
 Включает или отключает автоматический вывод сборочных директив в стандартный вывод `stdout`.
 
@@ -147,7 +184,7 @@ public fun emit_link_directives(emit: bool) -> CcBuilder
 
 По умолчанию включено (`true`).
 
-### 3.13 compile(archive_name: string) -> string
+### 3.16 compile(archive_name: string) -> string
 
 Запускает процесс компиляции и создания архива.
 
@@ -155,8 +192,8 @@ public fun emit_link_directives(emit: bool) -> CcBuilder
 public fun compile(archive_name: string) -> string
 ```
 
-Возвращает абсолютный путь к созданному файлу `lib<archive_name>.a`.  
-При успехе автоматически печатает директиву `yuki:link-archive=<путь>` и (в случае C++) `yuki:link-system=stdc++`.
+Возвращает абсолютный путь к созданному файлу архива (`lib<archive_name>.a` или `<archive_name>.lib`).  
+При успехе автоматически печатает директиву `yuki:link-archive=<путь>` и (в случае C++) директиву `yuki:link-system=stdc++` (или `libcpmt` для MSVC).
 
 ---
 
@@ -172,7 +209,6 @@ fun main() {
         .std("c++20")
         .opt("3")
         .def("ENABLE_FAST_MATH", "1")
-        .flag("-Wall")
         .compile("native_wrapper")
 }
 ```

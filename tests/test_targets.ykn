@@ -1,0 +1,81 @@
+load root.toolchain: is_msvc_target, is_windows_target, is_msvc_compiler, is_msvc_archiver, is_clang_compiler
+load root.toolchain: find_c_compiler_for_target, find_cpp_compiler_for_target, find_ar_for_target
+load root.cc: cc
+load root.rust: rust
+
+#[test]
+fun test_target_predicates() {
+    assert(is_msvc_target("x86_64-pc-windows-msvc"))
+    assert(!is_msvc_target("x86_64-pc-windows-gnu"))
+    assert(!is_msvc_target("x86_64-unknown-linux-gnu"))
+    assert(!is_msvc_target("aarch64-linux-android"))
+
+    assert(is_windows_target("x86_64-pc-windows-msvc"))
+    assert(is_windows_target("x86_64-pc-windows-gnu"))
+    assert(!is_windows_target("x86_64-unknown-linux-gnu"))
+    assert(!is_windows_target("x86_64-unknown-linux-musl"))
+    assert(!is_windows_target("aarch64-unknown-linux-gnu"))
+    assert(!is_windows_target("aarch64-unknown-linux-musl"))
+    assert(!is_windows_target("aarch64-linux-android"))
+}
+
+#[test]
+fun test_tool_predicates() {
+    assert(is_msvc_compiler("cl"))
+    assert(is_msvc_compiler("cl.exe"))
+    assert(is_msvc_compiler("/usr/bin/cl"))
+    assert(is_msvc_compiler("C:\\bin\\cl.exe"))
+    assert(is_msvc_compiler("clang-cl"))
+    assert(!is_msvc_compiler("clang"))
+    assert(!is_msvc_compiler("gcc"))
+
+    assert(is_msvc_archiver("lib"))
+    assert(is_msvc_archiver("lib.exe"))
+    assert(is_msvc_archiver("llvm-lib"))
+    assert(is_msvc_archiver("llvm-lib.exe"))
+    assert(!is_msvc_archiver("ar"))
+    assert(!is_msvc_archiver("llvm-ar"))
+
+    assert(is_clang_compiler("clang"))
+    assert(is_clang_compiler("clang++"))
+    assert(is_clang_compiler("aarch64-linux-android-clang"))
+    assert(!is_clang_compiler("gcc"))
+    assert(!is_clang_compiler("cl"))
+}
+
+#[test]
+fun test_builder_target_configuration() {
+    set c = cc().target("x86_64-pc-windows-msvc")
+    assert(c.target_triple == "x86_64-pc-windows-msvc")
+
+    set r = rust().target("aarch64-linux-android")
+    assert(r.target_triple == "aarch64-linux-android")
+}
+
+#[test]
+fun test_toolchain_resolution_for_all_targets() {
+    set t1 = find_c_compiler_for_target("x86_64-unknown-linux-gnu")
+    assert(t1 != "")
+    set t2 = find_c_compiler_for_target("x86_64-unknown-linux-musl")
+    assert(t2 != "")
+    set t3 = find_c_compiler_for_target("aarch64-unknown-linux-gnu")
+    assert(t3 != "")
+    set t4 = find_c_compiler_for_target("aarch64-unknown-linux-musl")
+    assert(t4 != "")
+    set t5 = find_c_compiler_for_target("x86_64-pc-windows-gnu")
+    assert(t5 != "")
+    set t6 = find_c_compiler_for_target("x86_64-pc-windows-msvc")
+    assert(t6 != "")
+    set t7 = find_c_compiler_for_target("aarch64-linux-android")
+    assert(t7 != "")
+
+    set cpp1 = find_cpp_compiler_for_target("x86_64-unknown-linux-gnu")
+    assert(cpp1 != "")
+    set cpp2 = find_cpp_compiler_for_target("x86_64-pc-windows-msvc")
+    assert(cpp2 != "")
+
+    set a1 = find_ar_for_target("x86_64-unknown-linux-gnu")
+    assert(a1 != "")
+    set a2 = find_ar_for_target("x86_64-pc-windows-msvc")
+    assert(a2 != "")
+}

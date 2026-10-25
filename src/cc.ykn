@@ -2,7 +2,8 @@ load std.fs.paths: path_extension, path_file_stem, path_parent, path_join
 load std.fs.dirs: dir_create_all
 load std.env: get_env
 load std.process: command_new
-load .toolchain: find_c_compiler, find_cpp_compiler, find_ar
+load .toolchain: find_c_compiler_for_target, find_cpp_compiler_for_target, find_ar_for_target
+load .toolchain: is_msvc_target, is_windows_target, is_msvc_compiler, is_msvc_archiver, is_clang_compiler
 load .emit: emit_link_archive, emit_link_system
 load .errors: CompilationError, ConfigError
 
@@ -14,6 +15,9 @@ public class CcBuilder {
     public std_version: string?
     public opt_level: string?
     public target_out_dir: string?
+    public target_triple: string?
+    public compiler_path: string?
+    public archiver_path: string?
     public is_cpp: bool
     public emit_link: bool
 
@@ -25,6 +29,9 @@ public class CcBuilder {
         rewrite this.std_version = null
         rewrite this.opt_level = null
         rewrite this.target_out_dir = null
+        rewrite this.target_triple = get_env("YUKINO_TARGET_TRIPLE")
+        rewrite this.compiler_path = null
+        rewrite this.archiver_path = null
         rewrite this.is_cpp = false
         rewrite this.emit_link = true
     }
@@ -95,6 +102,21 @@ public class CcBuilder {
         return this
     }
 
+    public fun target(triple: string) -> CcBuilder {
+        rewrite this.target_triple = triple
+        return this
+    }
+
+    public fun compiler(path: string) -> CcBuilder {
+        rewrite this.compiler_path = path
+        return this
+    }
+
+    public fun archiver(path: string) -> CcBuilder {
+        rewrite this.archiver_path = path
+        return this
+    }
+
     public fun out_dir(dir: string) -> CcBuilder {
         rewrite this.target_out_dir = dir
         return this
@@ -110,6 +132,109 @@ public class CcBuilder {
         return this
     }
 
+    fun compile_file_msvc(compiler: string, src: string, obj: string) {
+        set cmd = command_new(compiler)
+        cmd.arg("/nologo")
+        cmd.arg("/c")
+        cmd.arg(src)
+        cmd.arg("/Fo" + obj)
+        if this.opt_level != null {
+            if this.opt_level == "0" {
+                cmd.arg("/Od")
+            } elif this.opt_level == "s" {
+                cmd.arg("/Os")
+            } else {
+                cmd.arg("/O2")
+            }
+        } else {
+            cmd.arg("/O2")
+        }
+        if this.std_version != null {
+            cmd.arg("/std:" + (this.std_version ?? ""))
+        }
+        for j in 0..this.includes.len() {
+            cmd.arg("/I" + this.includes[j])
+        }
+        for j in 0..this.defines.len() {
+            cmd.arg("/D" + this.defines[j])
+        }
+        for j in 0..this.flags.len() {
+            cmd.arg(this.flags[j])
+        }
+        set out = cmd.output()
+        if !out.success() {
+            panic(CompilationError {
+                message: "C/C++ compilation failed for '${src}'",
+                command: "${compiler} /c ${src} /Fo${obj}",
+                output: out.stderr_string() + out.stdout_string(),
+                code: 2002,
+            })
+        }
+    }
+
+    fun compile_file_gnu(compiler: string, eff_target: string?, is_clang: bool, win_target: bool, src: string, obj: string) {
+        set cmd = command_new(compiler)
+        cmd.arg("-c")
+        cmd.arg(src)
+        cmd.arg("-o")
+        cmd.arg(obj)
+        if is_clang && eff_target != null {
+            cmd.arg("--target=" + (eff_target ?? ""))
+        }
+        if !win_target {
+            cmd.arg("-fPIC")
+        }
+        if this.opt_level != null {
+            cmd.arg("-O" + (this.opt_level ?? "2"))
+        } else {
+            cmd.arg("-O2")
+        }
+        if this.std_version != null {
+            cmd.arg("-std=" + (this.std_version ?? ""))
+        }
+        for j in 0..this.includes.len() {
+            cmd.arg("-I" + this.includes[j])
+        }
+        for j in 0..this.defines.len() {
+            cmd.arg("-D" + this.defines[j])
+        }
+        for j in 0..this.flags.len() {
+            cmd.arg(this.flags[j])
+        }
+        set out = cmd.output()
+        if !out.success() {
+            panic(CompilationError {
+                message: "C/C++ compilation failed for '${src}'",
+                command: "${compiler} -c ${src} -o ${obj}",
+                output: out.stderr_string(),
+                code: 2002,
+            })
+        }
+    }
+
+    fun run_archiver(ar: string, archive_path: string, obj_files: string[]) {
+        set ar_cmd = command_new(ar)
+        if is_msvc_archiver(ar) {
+            ar_cmd.arg("/nologo")
+            ar_cmd.arg("/OUT:" + archive_path)
+        } else {
+            ar_cmd.arg("rcs")
+            ar_cmd.arg(archive_path)
+        }
+        for i in 0..obj_files.len() {
+            ar_cmd.arg(obj_files[i])
+        }
+        set ar_out = ar_cmd.output()
+        if !ar_out.success() {
+            panic(CompilationError {
+                message: "Failed to create static archive '${archive_path}'",
+                command: "${ar} -> ${archive_path}",
+                output: ar_out.stderr_string() + ar_out.stdout_string(),
+                code: 2003,
+            })
+        }
+    }
+
     public fun compile(archive_name: string) -> string {
         if this.files.len() == 0 {
             panic(ConfigError {
@@ -117,88 +242,61 @@ public class CcBuilder {
                 code: 2001,
             })
         }
+        set eff_target: string? = this.target_triple ?? get_env("YUKINO_TARGET_TRIPLE")
+        set compiler: string = if this.compiler_path != null {
+            this.compiler_path ?? ""
+        } elif this.is_cpp {
+            find_cpp_compiler_for_target(eff_target)
+        } else {
+            find_c_compiler_for_target(eff_target)
+        }
+        set ar: string = if this.archiver_path != null {
+            this.archiver_path ?? ""
+        } else {
+            find_ar_for_target(eff_target)
+        }
 
-        set compiler: string = if this.is_cpp { find_cpp_compiler() } else { find_c_compiler() }
-        set ar: string = find_ar()
+        set msvc_comp: bool = is_msvc_compiler(compiler)
+        set msvc_tgt: bool = eff_target != null && is_msvc_target(eff_target ?? "")
+        set win_tgt: bool = eff_target != null && is_windows_target(eff_target ?? "")
+        set is_clang: bool = is_clang_compiler(compiler)
 
-        set raw_out: string = this.target_out_dir ?? get_env("YUKINO_OUT_DIR") ?? "yuki-work/buildtool"
+        set raw_out: string = this.target_out_dir ?? get_env("YUKINO_OUT_DIR") ?? "yuki-work/local/buildtool"
         set effective_out: string = path_join(raw_out, "native")
         dir_create_all(effective_out)
 
         set obj_files: string[] = []
-
+        set obj_ext: string = if msvc_comp { ".obj" } else { ".o" }
         for i in 0..this.files.len() {
             set src: string = this.files[i]
             set stem: string = path_file_stem(src)
-            set obj: string = path_join(effective_out, stem + ".o")
-
-            set cmd = command_new(compiler)
-            cmd.arg("-c")
-            cmd.arg(src)
-            cmd.arg("-o")
-            cmd.arg(obj)
-            cmd.arg("-fPIC")
-
-            if this.opt_level != null {
-                cmd.arg("-O" + (this.opt_level ?? "2"))
+            set obj: string = path_join(effective_out, stem + obj_ext)
+            if msvc_comp {
+                this.compile_file_msvc(compiler, src, obj)
+            } else {
+                this.compile_file_gnu(compiler, eff_target, is_clang, win_tgt, src, obj)
             }
-
-            if this.std_version != null {
-                cmd.arg("-std=" + (this.std_version ?? ""))
-            }
-
-            for j in 0..this.includes.len() {
-                cmd.arg("-I" + this.includes[j])
-            }
-
-            for j in 0..this.defines.len() {
-                cmd.arg("-D" + this.defines[j])
-            }
-
-            for j in 0..this.flags.len() {
-                cmd.arg(this.flags[j])
-            }
-
-            set out = cmd.output()
-            if !out.success() {
-                panic(CompilationError {
-                    message: "C/C++ compilation failed for '${src}'",
-                    command: "${compiler} -c ${src} -o ${obj}",
-                    output: out.stderr_string(),
-                    code: 2002,
-                })
-            }
-
             obj_files.push(obj)
         }
 
-        set archive_filename = "lib" + archive_name + ".a"
-        set archive_path = path_join(effective_out, archive_filename)
-
-        set ar_cmd = command_new(ar)
-        ar_cmd.arg("rcs")
-        ar_cmd.arg(archive_path)
-        for i in 0..obj_files.len() {
-            ar_cmd.arg(obj_files[i])
+        set archive_filename: string = if msvc_tgt || msvc_comp {
+            archive_name + ".lib"
+        } else {
+            "lib" + archive_name + ".a"
         }
-
-        set ar_out = ar_cmd.output()
-        if !ar_out.success() {
-            panic(CompilationError {
-                message: "Failed to create static archive '${archive_path}'",
-                command: "${ar} rcs ${archive_path}",
-                output: ar_out.stderr_string(),
-                code: 2003,
-            })
-        }
+        set archive_path: string = path_join(effective_out, archive_filename)
+        this.run_archiver(ar, archive_path, obj_files)
 
         if this.emit_link {
             emit_link_archive(archive_path)
             if this.is_cpp {
-                emit_link_system("stdc++")
+                if msvc_tgt {
+                    emit_link_system("libcpmt")
+                } else {
+                    emit_link_system("stdc++")
+                }
             }
         }
-
         return archive_path
     }
 }

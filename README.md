@@ -1,6 +1,6 @@
 # buildtool
 
-A native build helper library for the Yukino programming language.
+A native build helper library for the [Yukino](https://github.com/yukitsuri/yukino) programming language.
 
 `buildtool` is designed for pre-build scripts (`build.ykn`) to compile native C, C++, and Rust code into static archives (`.a`), seamlessly connecting them to your Yukino project.
 

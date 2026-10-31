@@ -1,4 +1,4 @@
-load std.fs.paths: path_parent, path_join, path_join3
+load std.fs.paths: path_parent, path_join
 load std.fs.dirs: dir_create_all
 load std.fs.files: file_exists, file_copy
 load std.env: get_env
@@ -110,9 +110,9 @@ public class RustBuilder {
 
         set mode_dir: string = if this.is_release { "release" } else { "debug" }
         set base_target_dir: string = if eff_target != null {
-            path_join3(cargo_parent, "target", path_join(eff_target ?? "", mode_dir))
+            path_join(cargo_parent, "target", path_join(eff_target ?? "", mode_dir))
         } else {
-            path_join3(cargo_parent, "target", mode_dir)
+            path_join(cargo_parent, "target", mode_dir)
         }
 
         set built_archive: string = path_join(base_target_dir, archive_filename)

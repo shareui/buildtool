@@ -5,8 +5,8 @@ profile = "debug"
 
 [[package]]
 name = "buildtool"
-version = "0.1.0"
+version = "0.1.1"
 kind = "static"
 source = "root"
-checksum = "blake3:81fcc6246e604c1c9d150533642ef4fd2cf0d70947ba99144e0a8b4192b846e9"
+checksum = "blake3:5cf99a88a836b081043ff0d1fc7a498039342304d9a705708747b1d097cb3afa"
 features = ["default"]

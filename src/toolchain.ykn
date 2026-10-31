@@ -17,10 +17,10 @@ public fun is_msvc_compiler(compiler: string) -> bool {
     if compiler == "cl" || compiler == "cl.exe" {
         return true
     }
-    if ends_with(compiler, "/cl") || ends_with(compiler, "\\cl") {
+    if ends_with(compiler, "/cl") == true || ends_with(compiler, "\\cl") == true {
         return true
     }
-    if ends_with(compiler, "/cl.exe") || ends_with(compiler, "\\cl.exe") {
+    if ends_with(compiler, "/cl.exe") == true || ends_with(compiler, "\\cl.exe") == true {
         return true
     }
     return contains(compiler, "clang-cl")
@@ -30,10 +30,10 @@ public fun is_msvc_archiver(ar: string) -> bool {
     if ar == "lib" || ar == "lib.exe" || ar == "llvm-lib" || ar == "llvm-lib.exe" {
         return true
     }
-    if ends_with(ar, "/lib") || ends_with(ar, "\\lib") || ends_with(ar, "/lib.exe") || ends_with(ar, "\\lib.exe") {
+    if ends_with(ar, "/lib") == true || ends_with(ar, "\\lib") == true || ends_with(ar, "/lib.exe") == true || ends_with(ar, "\\lib.exe") == true {
         return true
     }
-    if ends_with(ar, "/llvm-lib") || ends_with(ar, "\\llvm-lib") || ends_with(ar, "/llvm-lib.exe") || ends_with(ar, "\\llvm-lib.exe") {
+    if ends_with(ar, "/llvm-lib") == true || ends_with(ar, "\\llvm-lib") == true || ends_with(ar, "/llvm-lib.exe") == true || ends_with(ar, "\\llvm-lib.exe") == true {
         return true
     }
     return false

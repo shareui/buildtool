@@ -19,7 +19,7 @@
 
 ```toml
 [libs.build]
-buildtool = { git = "https://github.com/shareui/buildtool", tag = "v0.1.0" }
+buildtool = { git = "https://github.com/shareui/buildtool", tag = "v0.1.1" }
 ```
 
 Или по локальному пути:

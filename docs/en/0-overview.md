@@ -19,7 +19,7 @@ The library is designed for use in the pre-build script `build.ykn`. Add it to t
 
 ```toml
 [libs.build]
-buildtool = { git = "https://github.com/shareui/buildtool", tag = "v0.1.0" }
+buildtool = { git = "https://github.com/shareui/buildtool", tag = "v0.1.1" }
 ```
 
 Or using a local path:
